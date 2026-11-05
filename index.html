@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>دردشتي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e7c66">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{--bg:#eef3f1;--card:#fff;--ink:#14302b;--muted:#5d7a73;--accent:#0e7c66;--accent-ink:#fff;--line:#cfdcd8;--err:#b3261e;--mine:#0e7c66;--mine-ink:#fff;--theirs:#e3ece9}
 @media(prefers-color-scheme:dark){:root{--bg:#0f1c19;--card:#172a26;--ink:#e6f2ef;--muted:#8fb0a8;--accent:#3fc6a6;--accent-ink:#06201a;--line:#2a443e;--err:#ff8a80;--mine:#3fc6a6;--mine-ink:#06201a;--theirs:#223a35}}
@@ -93,6 +97,7 @@ button.link{background:none;color:var(--muted);font-weight:500;font-size:15px;ma
 <div style="position:fixed;bottom:8px;left:16px;right:16px;pointer-events:none"><div id="msg"></div></div>
 <div id="recaptcha"></div>
 
+<script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, onAuthStateChanged, signOut }

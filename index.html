@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دردشتي</title>
+<style>
+:root{--bg:#eef3f1;--card:#fff;--ink:#14302b;--muted:#5d7a73;--accent:#0e7c66;--accent-ink:#fff;--line:#cfdcd8;--err:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1c19;--card:#172a26;--ink:#e6f2ef;--muted:#8fb0a8;--accent:#3fc6a6;--accent-ink:#06201a;--line:#2a443e;--err:#ff8a80}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--ink);display:flex;align-items:center;justify-content:center;padding:16px}
+.screen{display:none;width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 22px}
+.screen.on{display:block}
+h1{font-size:22px;margin:0 0 6px}
+p{color:var(--muted);margin:0 0 20px;line-height:1.6;font-size:15px}
+input{width:100%;font-size:20px;padding:14px;border:1.5px solid var(--line);border-radius:12px;background:transparent;color:var(--ink);text-align:center;direction:ltr;margin-bottom:14px}
+input:focus{outline:3px solid var(--accent);outline-offset:1px;border-color:transparent}
+#otp{letter-spacing:10px;font-size:26px}
+#name{direction:rtl}
+button{width:100%;font-size:17px;font-weight:600;padding:14px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button:disabled{opacity:.5}
+button.link{background:none;color:var(--muted);font-weight:500;font-size:15px;margin-top:8px}
+#msg{min-height:22px;color:var(--err);font-size:14px;margin-top:12px;text-align:center}
+.logo{font-size:44px;margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<section class="screen on" id="s-phone">
+  <div class="logo">💬</div>
+  <h1>أدخل رقم هاتفك</h1>
+  <p>اكتب الرقم مع رمز الدولة، مثل +9665XXXXXXXX</p>
+  <input id="phone" type="tel" value="+966" inputmode="tel" autocomplete="tel">
+  <button id="send">إرسال الرمز</button>
+</section>
+
+<section class="screen" id="s-otp">
+  <h1>أدخل رمز التحقق</h1>
+  <p id="otp-hint">أدخل الرمز المكوّن من 6 أرقام.</p>
+  <input id="otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+  <button id="verify">تأكيد</button>
+  <button class="link" id="resend" disabled>إعادة الإرسال</button>
+  <button class="link" id="back">تغيير الرقم</button>
+</section>
+
+<section class="screen" id="s-profile">
+  <h1>أكمل ملفك الشخصي</h1>
+  <p>الاسم الذي سيراه الآخرون.</p>
+  <input id="name" type="text" maxlength="40" placeholder="اسمك">
+  <button id="save">حفظ ومتابعة</button>
+</section>
+
+<section class="screen" id="s-home">
+  <h1 id="hello">مرحباً</h1>
+  <p id="myphone"></p>
+  <p>سجّلت الدخول بنجاح. الخطوة القادمة: قائمة المحادثات.</p>
+  <button id="logout">تسجيل الخروج</button>
+</section>
+
+<div id="msg-wrap" style="position:fixed;bottom:16px;left:16px;right:16px;text-align:center"><div id="msg"></div></div>
+<div id="recaptcha"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, onAuthStateChanged, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB9I0FC5WLCZnv_RjfNwHW6l_MufeeN9cw",
+  authDomain: "my-chat-app-fdae4.firebaseapp.com",
+  projectId: "my-chat-app-fdae4",
+  storageBucket: "my-chat-app-fdae4.firebasestorage.app",
+  messagingSenderId: "877999004775",
+  appId: "1:877999004775:web:6dc8723456a57bd54a08c2"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+auth.languageCode = "ar";
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("on"));
+  $(id).classList.add("on");
+  say("");
+}
+function say(t){ $("msg").textContent = t; }
+
+const errors = {
+  "auth/invalid-phone-number": "رقم الهاتف غير صحيح. ابدأ بـ + ورمز الدولة.",
+  "auth/invalid-verification-code": "الرمز غير صحيح.",
+  "auth/code-expired": "انتهت صلاحية الرمز. أعد الإرسال.",
+  "auth/too-many-requests": "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.",
+  "auth/unauthorized-domain": "هذا النطاق غير مضاف في Authorized domains في Firebase.",
+  "auth/captcha-check-failed": "فشل التحقق من reCAPTCHA. حدّث الصفحة.",
+  "permission-denied": "تعذّر الحفظ. تحقق من قواعد Firestore."
+};
+const errText = e => errors[e.code] || ("خطأ: " + (e.code || e.message));
+
+let confirmation = null, verifier = null, timer = null;
+
+function startTimer(){
+  let s = 60; $("resend").disabled = true;
+  clearInterval(timer);
+  timer = setInterval(() => {
+    s--; $("resend").textContent = s > 0 ? `إعادة الإرسال بعد ${s} ث` : "إعادة الإرسال";
+    if (s <= 0){ clearInterval(timer); $("resend").disabled = false; }
+  }, 1000);
+  $("resend").textContent = "إعادة الإرسال بعد 60 ث";
+}
+
+async function sendCode(){
+  const phone = $("phone").value.replace(/\s/g, "");
+  if (!/^\+\d{8,15}$/.test(phone)) return say(errors["auth/invalid-phone-number"]);
+  $("send").disabled = true; say("");
+  try{
+    if (!verifier) verifier = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
+    confirmation = await signInWithPhoneNumber(auth, phone, verifier);
+    $("otp-hint").textContent = "أرسلنا الرمز إلى " + phone;
+    $("otp").value = ""; show("s-otp"); startTimer(); $("otp").focus();
+  }catch(e){
+    say(errText(e));
+    try{ verifier && verifier.clear(); }catch(_){}
+    verifier = null;
+  }
+  $("send").disabled = false;
+}
+
+$("send").onclick = sendCode;
+$("resend").onclick = async () => { show("s-phone"); await sendCode(); };
+$("back").onclick = () => { clearInterval(timer); show("s-phone"); };
+
+$("verify").onclick = async () => {
+  const code = $("otp").value.trim();
+  if (code.length !== 6) return say("أدخل الرمز المكوّن من 6 أرقام.");
+  $("verify").disabled = true;
+  try{ await confirmation.confirm(code); }
+  catch(e){ say(errText(e)); }
+  $("verify").disabled = false;
+};
+
+$("save").onclick = async () => {
+  const name = $("name").value.trim();
+  if (!name) return say("اكتب اسمك.");
+  const u = auth.currentUser;
+  $("save").disabled = true;
+  try{
+    await setDoc(doc(db, "users", u.uid), {
+      uid: u.uid, phone: u.phoneNumber, name, createdAt: serverTimestamp()
+    }, { merge: true });
+    showHome(name);
+  }catch(e){ say(errText(e)); }
+  $("save").disabled = false;
+};
+
+$("logout").onclick = () => signOut(auth);
+
+function showHome(name){
+  $("hello").textContent = "مرحباً " + name;
+  $("myphone").textContent = auth.currentUser.phoneNumber;
+  show("s-home");
+}
+
+onAuthStateChanged(auth, async user => {
+  if (!user){ show("s-phone"); return; }
+  try{
+    const snap = await getDoc(doc(db, "users", user.uid));
+    const name = snap.exists() ? snap.data().name : "";
+    name ? showHome(name) : show("s-profile");
+  }catch(e){ show("s-profile"); say(errText(e)); }
+});
+</script>
+</body>
+</html>
